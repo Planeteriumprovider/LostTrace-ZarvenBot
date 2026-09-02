@@ -2,7 +2,8 @@ import makeWASocket, {
   DisconnectReason,
   useMultiFileAuthState,
   fetchLatestBaileysVersion,
-  makeCacheableSignalKeyStore
+  makeCacheableSignalKeyStore,
+  downloadMediaMessage
 } from '@whiskeysockets/baileys';
 import { Boom } from '@hapi/boom';
 import pino from 'pino';
@@ -23,6 +24,7 @@ const rl = readline.createInterface({
 const askQuestion = (text) => new Promise((resolve) => rl.question(text, resolve));
 
 const PREFIX = '!';
+const BOT_OWNERS = ['491703630216', '61890562674824@lid', '491703630216@s.whatsapp.net'];
 
 const codexQuestions = [
   { q: "Man darf als Andenken keine Souvenirs aus Lost Places mitnehmen.", a: "true" },
@@ -127,12 +129,14 @@ async function startBot() {
                            m.extendedTextMessage?.text || 
                            m.ephemeralMessage?.message?.extendedTextMessage?.text || 
                            m.ephemeralMessage?.message?.conversation || 
+                           m.imageMessage?.caption ||
                            '';
       
       if (!incomingText.startsWith(PREFIX)) continue;
 
       const pushName = msg.pushName || (msg.key.fromMe ? 'Du (Host)' : 'Unbekannt');
       const senderNumber = sender.split('@')[0];
+      const isOwner = BOT_OWNERS.includes(senderNumber) || BOT_OWNERS.includes(sender);
       const timestamp = new Date((msg.messageTimestamp || Math.floor(Date.now() / 1000)) * 1000).toLocaleString('de-DE');
 
       console.log(`\n[BEFEHL EMPFANGEN]`);
@@ -140,6 +144,7 @@ async function startBot() {
       console.log(`Name: ${pushName}`);
       console.log(`Nummer: ${senderNumber}`);
       console.log(`JID/LID: ${sender}`);
+      console.log(`Owner-Status: ${isOwner ? 'JA' : 'NEIN'}`);
       console.log(`Gruppe: ${isGroup ? remoteJid : 'Privatchat'}`);
       console.log(`Befehl: ${incomingText}\n`);
 
@@ -152,6 +157,7 @@ async function startBot() {
           `*${PREFIX}menu* - Zeigt dieses Menü an\n` +
           `*${PREFIX}codex* - Startet die Kodex Prüfung\n` +
           `*${PREFIX}lostplace* - Sendet ein zufälliges Bild\n` +
+          `*${PREFIX}upload* - Bild per Zitat in den Bot laden\n` +
           `*${PREFIX}map* - Sendet die KML Karte\n` +
           `*${PREFIX}jid* - Zeigt deine JID an\n` +
           `*${PREFIX}lid* - Zeigt deine LID an\n` +
@@ -163,6 +169,46 @@ async function startBot() {
       }
       else if (command === 'lid') {
         await sock.sendMessage(remoteJid, { text: `Deine LID lautet: ${sender}` }, { quoted: msg });
+      }
+      else if (command === 'upload') {
+        const quotedMsg = m.extendedTextMessage?.contextInfo?.quotedMessage;
+        const targetImageMessage = m.imageMessage || quotedMsg?.imageMessage;
+
+        if (!targetImageMessage) {
+          await sock.sendMessage(remoteJid, { text: "Bitte antworte mit *!upload* auf ein Bild oder sende es direkt mit der Bildunterschrift *!upload*." }, { quoted: msg });
+          continue;
+        }
+
+        try {
+          const fakeMsg = {
+            message: targetImageMessage === m.imageMessage ? m : quotedMsg
+          };
+          
+          const buffer = await downloadMediaMessage(
+            fakeMsg,
+            'buffer',
+            {},
+            { 
+              logger: pino({ level: 'silent' }),
+              reuploadRequest: sock.updateMediaMessage 
+            }
+          );
+
+          const imagesDir = path.join(__dirname, 'assets', 'images');
+          if (!fs.existsSync(imagesDir)) {
+            fs.mkdirSync(imagesDir, { recursive: true });
+          }
+
+          const fileName = `lostplace_${Date.now()}.png`;
+          const savePath = path.join(imagesDir, fileName);
+          fs.writeFileSync(savePath, buffer);
+
+          console.log(`[UPLOAD ERFOLGREICH] Bild gespeichert unter: ${savePath}`);
+          await sock.sendMessage(remoteJid, { text: `*Bild erfolgreich in assets/images/ gespeichert!*\nDateiname: _${fileName}_` }, { quoted: msg });
+        } catch (error) {
+          console.error('Fehler beim Herunterladen des Bildes:', error);
+          await sock.sendMessage(remoteJid, { text: "Fehler beim Herunterladen und Speichern des Bildes." }, { quoted: msg });
+        }
       }
       else if (command === 'codex') {
         if (args[1] === 'answer' && args.length >= 3) {
@@ -240,6 +286,15 @@ async function startBot() {
         if (isGroup) {
           const groupMetadata = await sock.groupMetadata(remoteJid);
           mentions = groupMetadata.participants.map(p => p.id);
+          
+          console.log(`\n[!ALL AUSGEFÜHRT]`);
+          console.log(`Gruppe: ${remoteJid}`);
+          console.log(`Gesamt markierte Personen: ${mentions.length}`);
+          console.log(`Markierte JIDs:`);
+          mentions.forEach((jid, index) => {
+            console.log(` [${index + 1}] ${jid}`);
+          });
+          console.log(``);
         }
 
         await sock.sendMessage(remoteJid, { 
