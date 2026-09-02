@@ -137,7 +137,7 @@ async function startBot() {
           msg: msg
         });
 
-        if (recentImageMessages.length > 200) {
+        if (recentImageMessages.length > 500) {
           recentImageMessages.shift();
         }
       }
@@ -190,10 +190,20 @@ async function startBot() {
         const quotedMsg = contextInfo?.quotedMessage;
         const quotedId = contextInfo?.stanzaId;
 
-        const imagesToDownload = [];
+        let imagesToDownload = [];
 
         if (imageContent) {
-          imagesToDownload.push(msg);
+          await new Promise((resolve) => setTimeout(resolve, 3500));
+          const baseTime = Number(msg.messageTimestamp || Math.floor(Date.now() / 1000));
+          const batch = recentImageMessages.filter(item => 
+            item.remoteJid === remoteJid && Math.abs(item.timestamp - baseTime) <= 25
+          );
+          const uniqueMap = new Map();
+          for (const item of batch) {
+            uniqueMap.set(item.id, item.msg);
+          }
+          uniqueMap.set(msg.key.id, msg);
+          imagesToDownload = Array.from(uniqueMap.values());
         } else if (quotedMsg) {
           let matchedTimestamp = null;
           if (quotedId) {
@@ -205,11 +215,13 @@ async function startBot() {
 
           if (matchedTimestamp) {
             const batch = recentImageMessages.filter(item => 
-              item.remoteJid === remoteJid && Math.abs(item.timestamp - matchedTimestamp) <= 15
+              item.remoteJid === remoteJid && Math.abs(item.timestamp - matchedTimestamp) <= 25
             );
+            const uniqueMap = new Map();
             for (const item of batch) {
-              imagesToDownload.push(item.msg);
+              uniqueMap.set(item.id, item.msg);
             }
+            imagesToDownload = Array.from(uniqueMap.values());
           } else {
             const unwrappedQuoted = quotedMsg.ephemeralMessage?.message || quotedMsg;
             if (unwrappedQuoted.imageMessage) {
@@ -219,7 +231,7 @@ async function startBot() {
         }
 
         if (imagesToDownload.length === 0) {
-          await sock.sendMessage(remoteJid, { text: "Bitte antworte mit *!upload* auf ein Bild oder Album oder sende ein Bild direkt mit *!upload* in der Beschreibung." }, { quoted: msg });
+          await sock.sendMessage(remoteJid, { text: "Bitte antworte mit *!upload* auf ein Bild oder Album oder sende Bilder direkt mit der Bildunterschrift *!upload*." }, { quoted: msg });
           continue;
         }
 
@@ -241,7 +253,7 @@ async function startBot() {
               }
             );
 
-            const fileName = `lostplace_${Date.now()}_${Math.floor(Math.random() * 10000)}.png`;
+            const fileName = `lostplace_${Date.now()}_${Math.floor(Math.random() * 100000)}.png`;
             const savePath = path.join(imagesDir, fileName);
             fs.writeFileSync(savePath, buffer);
             savedCount++;
