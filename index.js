@@ -157,7 +157,7 @@ async function startBot() {
           `*${PREFIX}menu* - Zeigt dieses Menü an\n` +
           `*${PREFIX}codex* - Startet die Kodex Prüfung\n` +
           `*${PREFIX}lostplace* - Sendet ein zufälliges Bild\n` +
-          `*${PREFIX}upload* - Bild per Zitat in den Bot laden\n` +
+          `*${PREFIX}upload* - Bilder für !lostplace hochladen.\n` +
           `*${PREFIX}map* - Sendet die KML Karte\n` +
           `*${PREFIX}jid* - Zeigt deine JID an\n` +
           `*${PREFIX}lid* - Zeigt deine LID an\n` +
@@ -165,17 +165,17 @@ async function startBot() {
         await sock.sendMessage(remoteJid, { text }, { quoted: msg });
       } 
       else if (command === 'jid') {
-        await sock.sendMessage(remoteJid, { text: `Deine JID lautet: ${sender}` }, { quoted: msg });
+        await sock.sendMessage(remoteJid, { text: `*Deine JID lautet:* ${sender}` }, { quoted: msg });
       }
       else if (command === 'lid') {
-        await sock.sendMessage(remoteJid, { text: `Deine LID lautet: ${sender}` }, { quoted: msg });
+        await sock.sendMessage(remoteJid, { text: `*Deine LID lautet:* ${sender}` }, { quoted: msg });
       }
       else if (command === 'upload') {
         const quotedMsg = m.extendedTextMessage?.contextInfo?.quotedMessage;
         const targetImageMessage = m.imageMessage || quotedMsg?.imageMessage;
 
         if (!targetImageMessage) {
-          await sock.sendMessage(remoteJid, { text: "Bitte antworte mit *!upload* auf ein Bild oder sende es direkt mit der Bildunterschrift *!upload*." }, { quoted: msg });
+          await sock.sendMessage(remoteJid, { text: "Bitte antworte mit *!upload* auf ein Bild / mehrere Bilder oder sende es direkt mit der Bildunterschrift *!upload*." }, { quoted: msg });
           continue;
         }
 
@@ -218,10 +218,10 @@ async function startBot() {
           if (!correctAnswer) {
             await sock.sendMessage(remoteJid, { text: `Es läuft gerade keine Kodex-Prüfung. Starte eine mit *${PREFIX}codex*.` }, { quoted: msg });
           } else if (userAnswer === correctAnswer) {
-            await sock.sendMessage(remoteJid, { text: "Richtig! Du kennst den Urbex-Kodex." }, { quoted: msg });
+            await sock.sendMessage(remoteJid, { text: "Du hast die richtige Antwort gewählt! Mach weiter so." }, { quoted: msg });
             codexSessions.delete(remoteJid);
           } else if (userAnswer === 'true' || userAnswer === 'false') {
-            await sock.sendMessage(remoteJid, { text: "Falsch! Das entspricht nicht den Regeln des Urbexens." }, { quoted: msg });
+            await sock.sendMessage(remoteJid, { text:"FALSCH! Bitte lies dir nochmal den Urbex Codex mit *!rules* durch!" }, { quoted: msg });
             codexSessions.delete(remoteJid);
           } else {
             await sock.sendMessage(remoteJid, { text: `Bitte antworte exakt mit *${PREFIX}codex answer true* oder *${PREFIX}codex answer false*.` }, { quoted: msg });
@@ -231,7 +231,7 @@ async function startBot() {
           const questionObj = codexQuestions[randomIndex];
           codexSessions.set(remoteJid, questionObj.a);
           
-          const text = `*LostTrace | Kodex Prüfung*\n\nBeantworte die folgende Aussage mit *${PREFIX}codex answer true* oder *${PREFIX}codex answer false*:\n\n"${questionObj.q}"`;
+          const text = `*🏚 LostTrace | Kodex Prüfung 🤔*\n\nBeantworte die folgende Aussage mit *${PREFIX}codex answer true* oder *${PREFIX}codex answer false*:\n\n"${questionObj.q}"`;
           await sock.sendMessage(remoteJid, { text }, { quoted: msg });
         }
       }
