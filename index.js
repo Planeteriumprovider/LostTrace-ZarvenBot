@@ -108,21 +108,44 @@ async function startBot() {
 
   sock.ev.on('creds.update', saveCreds);
 
-  sock.ev.on('messages.upsert', async ({ messages, type }) => {
-    if (type !== 'notify') return;
-
+  sock.ev.on('messages.upsert', async ({ messages }) => {
     for (const msg of messages) {
       if (!msg.message) continue;
 
       const remoteJid = msg.key.remoteJid;
-      const incomingText = msg.message?.conversation || msg.message?.extendedTextMessage?.text || '';
+      const isGroup = remoteJid.endsWith('@g.us');
+      
+      let sender = msg.key.participant || msg.key.remoteJid;
+      if (msg.key.fromMe) {
+        sender = sock.user?.id?.split(':')[0] + '@s.whatsapp.net';
+      }
+
+      if (!sender) continue;
+
+      const m = msg.message;
+      const incomingText = m.conversation || 
+                           m.extendedTextMessage?.text || 
+                           m.ephemeralMessage?.message?.extendedTextMessage?.text || 
+                           m.ephemeralMessage?.message?.conversation || 
+                           '';
       
       if (!incomingText.startsWith(PREFIX)) continue;
+
+      const pushName = msg.pushName || (msg.key.fromMe ? 'Du (Host)' : 'Unbekannt');
+      const senderNumber = sender.split('@')[0];
+      const timestamp = new Date((msg.messageTimestamp || Math.floor(Date.now() / 1000)) * 1000).toLocaleString('de-DE');
+
+      console.log(`\n[BEFEHL EMPFANGEN]`);
+      console.log(`Zeit: ${timestamp}`);
+      console.log(`Name: ${pushName}`);
+      console.log(`Nummer: ${senderNumber}`);
+      console.log(`JID/LID: ${sender}`);
+      console.log(`Gruppe: ${isGroup ? remoteJid : 'Privatchat'}`);
+      console.log(`Befehl: ${incomingText}\n`);
 
       const fullCommand = incomingText.slice(PREFIX.length).trim();
       const args = fullCommand.split(' ');
       const command = args[0].toLowerCase();
-      const isGroup = remoteJid.endsWith('@g.us');
 
       if (command === 'menu') {
         const text = `*🏚 LostTrace - Zarven Bot Menü 🫡*\n\n` +
@@ -130,9 +153,17 @@ async function startBot() {
           `*${PREFIX}codex* - Startet die Kodex Prüfung\n` +
           `*${PREFIX}lostplace* - Sendet ein zufälliges Bild\n` +
           `*${PREFIX}map* - Sendet die KML Karte\n` +
+          `*${PREFIX}jid* - Zeigt deine JID an\n` +
+          `*${PREFIX}lid* - Zeigt deine LID an\n` +
           `*${PREFIX}all [Text]* - Markiert alle in der Gruppe`;
         await sock.sendMessage(remoteJid, { text }, { quoted: msg });
       } 
+      else if (command === 'jid') {
+        await sock.sendMessage(remoteJid, { text: `Deine JID lautet: ${sender}` }, { quoted: msg });
+      }
+      else if (command === 'lid') {
+        await sock.sendMessage(remoteJid, { text: `Deine LID lautet: ${sender}` }, { quoted: msg });
+      }
       else if (command === 'codex') {
         if (args[1] === 'answer' && args.length >= 3) {
           const userAnswer = args[2].toLowerCase();
