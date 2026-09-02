@@ -54,6 +54,48 @@ const codexSessions = new Map();
 const recentImageMessages = [];
 const uploadSessions = new Map();
 
+function parseKmlSpots(kmlText) {
+  const spots = [];
+  const placemarks = kmlText.match(/<Placemark[\s\S]*?<\/Placemark>/gi) || [];
+
+  for (const placemark of placemarks) {
+    const nameMatch = placemark.match(/<name>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([\s\S]*?))<\/name>/i);
+    const title = (nameMatch ? (nameMatch[1] || nameMatch[2]) : 'Unbekannter Spot').trim();
+
+    const descMatch = placemark.match(/<description>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([\s\S]*?))<\/description>/i);
+    let description = descMatch ? (descMatch[1] || descMatch[2]) : 'Keine Beschreibung vorhanden';
+    description = description.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+
+    const coordMatch = placemark.match(/<coordinates>([\s\S]*?)<\/coordinates>/i);
+    let coordinates = 'Nicht hinterlegt';
+    let mapsLink = '';
+
+    if (coordMatch) {
+      const rawFirst = coordMatch[1].trim().split(/\s+/)[0];
+      const parts = rawFirst.split(',');
+      if (parts.length >= 2) {
+        const lng = parts[0].trim();
+        const lat = parts[1].trim();
+        coordinates = `${lat}, ${lng}`;
+        mapsLink = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
+      }
+    }
+
+    const addrMatch = placemark.match(/<address>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([\s\S]*?))<\/address>/i);
+    const address = (addrMatch ? (addrMatch[1] || addrMatch[2]) : 'Nicht angegeben').trim();
+
+    spots.push({
+      title,
+      description: description || 'Keine Beschreibung vorhanden',
+      coordinates,
+      address,
+      mapsLink
+    });
+  }
+
+  return spots;
+}
+
 async function processAndSaveImages(sock, remoteJid, imageList, replyMsg) {
   const imagesDir = path.join(__dirname, 'assets', 'images');
   if (!fs.existsSync(imagesDir)) {
@@ -246,6 +288,7 @@ async function startBot() {
           `*${PREFIX}menu* - Zeigt dieses Menü an\n` +
           `*${PREFIX}codex* - Startet die Kodex Prüfung\n` +
           `*${PREFIX}lostplace* - Sendet ein zufälliges Bild\n` +
+          `*${PREFIX}location* - Zieht einen zufälligen Spot aus der KML Karte\n` +
           `*${PREFIX}upload* - Bilder für !lostplace hochladen\n` +
           `*${PREFIX}map* - Sendet die KML Karte\n` +
           `*${PREFIX}jid* - Zeigt deine JID an\n` +
@@ -258,6 +301,34 @@ async function startBot() {
       }
       else if (command === 'lid') {
         await sock.sendMessage(remoteJid, { text: `*Deine LID lautet:* ${sender}` }, { quoted: msg });
+      }
+      else if (command === 'location') {
+        const mapPath = path.join(__dirname, 'assets', 'maps', 'LostTraceMap.kml');
+
+        if (!fs.existsSync(mapPath)) {
+          await sock.sendMessage(remoteJid, { text: "Die Datei assets/maps/LostTraceMap.kml wurde nicht gefunden." }, { quoted: msg });
+          continue;
+        }
+
+        const kmlContent = fs.readFileSync(mapPath, 'utf-8');
+        const spots = parseKmlSpots(kmlContent);
+
+        if (spots.length === 0) {
+          await sock.sendMessage(remoteJid, { text: "Es konnten keine Orte in der LostTraceMap.kml gefunden werden." }, { quoted: msg });
+          continue;
+        }
+
+        const randomSpot = spots[Math.floor(Math.random() * spots.length)];
+        let text = `🏷 *Name:* ${randomSpot.title}\n` +
+          `📄 *Beschreibung & Infos:* ${randomSpot.description}\n` +
+          `🧭 *Koordinaten:* ${randomSpot.coordinates}\n` +
+          `📍 *Adresse / Land:* ${randomSpot.address}`;
+
+        if (randomSpot.mapsLink) {
+          text += `\n🗺 *Google Maps:* ${randomSpot.mapsLink}`;
+        }
+
+        await sock.sendMessage(remoteJid, { text }, { quoted: msg });
       }
       else if (command === 'upload') {
         if (imageContent) {
