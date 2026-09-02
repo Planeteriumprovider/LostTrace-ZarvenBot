@@ -27,11 +27,27 @@ const PREFIX = '!';
 const BOT_OWNERS = ['491703630216', '61890562674824@lid', '491703630216@s.whatsapp.net'];
 
 const codexQuestions = [
-  { q: "Man darf als Andenken keine Souvenirs aus Lost Places mitnehmen.", a: "true" },
+  { q: "Selbst wenn ein Gebäude seit über 30 Jahren völlig verfallen ist, erlischt das Hausrecht des Eigentümers juristisch in Deutschland niemals automatisch.", a: "true" },
+  { q: "Das Wegdrücken oder Abschneiden von wuchernden Ästen und Dornenhecken, um an ein Fenster zu gelangen, verstößt bereits gegen den strikten Urbex-Kodex.", a: "true" },
+  { q: "Das bloße Klettern durch ein bereits sperrangelweit offenes Fenster ohne Glas gilt rechtlich bereits als vollendeter Hausfriedensbruch.", a: "true" },
+  { q: "Das Einatmen von aufgewirbeltem, trockenem Taubenkot in verlassenen Dachböden kann ohne Atemschutz lebensgefährliche Lungeninfektionen verursachen.", a: "true" },
+  { q: "Man darf als Andenken *keine* Souvenirs aus Lost Places mitnehmen.", a: "true" },
   { q: "Man sollte niemals genaue Koordinaten öffentlich im Internet teilen.", a: "true" },
   { q: "Wenn ein Gebäude verschlossen ist, darf man eine Tür aufhebeln, um hineinzukommen.", a: "false" },
-  { q: "Hinterlasse alles außer deine Fußspuren. Nimm nichts mit außer alle Bilder im Lostplace.", a: "false" },
-  { q: "Im Lostplace gibts noch Strom. Du testest ein Licht und lässt es an, wenn du den Ort verlässt, damit der Nächste besser erkunden kann.", a: "false" }
+  { q: "Hinterlasse alles außer deine Fußspuren. Nimm nichts mit außer alle Bilder die im Lostplace liegen.", a: "false" },
+  { q: "Im Lostplace gibt es noch Strom. Du testest ein Licht und lässt es an, wenn du den Ort verlässt, damit der Nächste besser erkunden kann.", a: "false" },
+  { q: "Das bloße Dabeihaben eines Bolzenschneiders oder Hebeleisens im Rucksack kann bei einer Kontrolle sofort als schwerer Diebstahlversuch gewertet werden, selbst wenn man nichts aufgebrochen hat.", a: "true" },
+  { q: "Wenn ein geschichtsträchtiger Ort akut von Vandalismus bedroht ist, darf man historische Dokumente mitnehmen, um sie vor der Vernichtung zu bewahren.", a: "false" },
+  { q: "Ein Lost Place ohne Zaun, Tor oder Verbotsschilder gilt in Deutschland automatisch als herrenlos und darf frei betreten werden.", a: "false" },
+  { q: "Um Sauerstoffmangel oder giftige Gase in tiefen Schächten und Kellern rechtzeitig zu erkennen, reicht es, auf stechende Gerüche zu achten.", a: "false" },
+  { q: "Eine gewöhnliche FFP2-Maske filtert gefährliche lungengängige Asbestfasern zuverlässig aus der Atemluft.", a: "false" },
+  { q: "Es ist kodexkonform, Koordinaten mit fremden Explorern zu tauschen, solange man dafür einen gleichwertigen Spot im Gegenzug bekommt.", a: "false" },
+  { q: "Das Schließen eines offenen Fensters, durch das Regen in ein historisches Zimmer schlägt, ist laut striktem Kodex eine erlaubte Maßnahme.", a: "false" },
+  { q: "Laut Urbex-Kodex ist es eine feste Pflicht, herumliegenden Müll anderer Besucher aus dem Gebäude zu tragen und zu entsorgen.", a: "false" },
+  { q: "Versteckte Markierungen mit Kreide an den Wänden sind in riesigen unterirdischen Bunkersystemen zur Orientierung kodexkonform.", a: "false" },
+  { q: "Laut Kodex ist es Pflicht, vor der Veröffentlichung von Fotos jegliche Gesichter, Graffitis von Locals oder KFZ-Kennzeichen unkenntlich zu machen.", a: "true" },
+  { q: "Zerbrochene alte Leuchtstoffröhren oder Quecksilberschalter in Industriebrachen können hochgiftige Dämpfe freisetzen, die geruchlos am Boden stehen bleiben.", a: "true" },
+  { q: "Wenn man von einem Sicherheitsdienst oder der Polizei auf frischer Tat ertappt wird, ist Anhalten und Kooperieren laut Kodex und Eigensicherung die einzig richtige Maßnahme.", a: "true" }
 ];
 
 const codexSessions = new Map();
