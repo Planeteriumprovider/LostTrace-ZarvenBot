@@ -35,6 +35,7 @@ const codexQuestions = [
 ];
 
 const codexSessions = new Map();
+const recentImageMessages = [];
 
 async function startBot() {
   let pairingCodeRequested = false;
@@ -125,11 +126,25 @@ async function startBot() {
       if (!sender) continue;
 
       const m = msg.message;
-      const incomingText = m.conversation || 
-                           m.extendedTextMessage?.text || 
-                           m.ephemeralMessage?.message?.extendedTextMessage?.text || 
-                           m.ephemeralMessage?.message?.conversation || 
-                           m.imageMessage?.caption ||
+      const unwrappedMessage = m.ephemeralMessage?.message || m;
+      const imageContent = unwrappedMessage.imageMessage;
+
+      if (imageContent) {
+        recentImageMessages.push({
+          id: msg.key.id,
+          remoteJid: remoteJid,
+          timestamp: Number(msg.messageTimestamp || Math.floor(Date.now() / 1000)),
+          msg: msg
+        });
+
+        if (recentImageMessages.length > 200) {
+          recentImageMessages.shift();
+        }
+      }
+
+      const incomingText = unwrappedMessage.conversation || 
+                           unwrappedMessage.extendedTextMessage?.text || 
+                           unwrappedMessage.imageMessage?.caption ||
                            '';
       
       if (!incomingText.startsWith(PREFIX)) continue;
@@ -171,30 +186,40 @@ async function startBot() {
         await sock.sendMessage(remoteJid, { text: `*Deine LID lautet:* ${sender}` }, { quoted: msg });
       }
       else if (command === 'upload') {
-        const contextInfo = m.extendedTextMessage?.contextInfo || 
-                            m.ephemeralMessage?.message?.extendedTextMessage?.contextInfo;
-        const quoted = contextInfo?.quotedMessage;
+        const contextInfo = unwrappedMessage.extendedTextMessage?.contextInfo;
+        const quotedMsg = contextInfo?.quotedMessage;
+        const quotedId = contextInfo?.stanzaId;
 
-        let imageTargets = [];
+        const imagesToDownload = [];
 
-        if (m.imageMessage) {
-          imageTargets.push({ message: m });
-        } else if (quoted) {
-          const unwrappedQuoted = quoted.ephemeralMessage?.message || quoted;
-          if (unwrappedQuoted.imageMessage) {
-            imageTargets.push({ message: unwrappedQuoted });
-          } else if (unwrappedQuoted.albumMessage) {
-            const albumCollection = unwrappedQuoted.albumMessage.expectedImageCount ? unwrappedQuoted.albumMessage : unwrappedQuoted;
-            for (const key in albumCollection) {
-              if (albumCollection[key]?.imageMessage) {
-                imageTargets.push({ message: { imageMessage: albumCollection[key].imageMessage } });
-              }
+        if (imageContent) {
+          imagesToDownload.push(msg);
+        } else if (quotedMsg) {
+          let matchedTimestamp = null;
+          if (quotedId) {
+            const found = recentImageMessages.find(item => item.id === quotedId && item.remoteJid === remoteJid);
+            if (found) {
+              matchedTimestamp = found.timestamp;
+            }
+          }
+
+          if (matchedTimestamp) {
+            const batch = recentImageMessages.filter(item => 
+              item.remoteJid === remoteJid && Math.abs(item.timestamp - matchedTimestamp) <= 15
+            );
+            for (const item of batch) {
+              imagesToDownload.push(item.msg);
+            }
+          } else {
+            const unwrappedQuoted = quotedMsg.ephemeralMessage?.message || quotedMsg;
+            if (unwrappedQuoted.imageMessage) {
+              imagesToDownload.push({ message: unwrappedQuoted });
             }
           }
         }
 
-        if (imageTargets.length === 0) {
-          await sock.sendMessage(remoteJid, { text: "Bitte antworte mit *!upload* auf ein Bild oder Album oder sende ein Bild direkt mit der Bildunterschrift *!upload*." }, { quoted: msg });
+        if (imagesToDownload.length === 0) {
+          await sock.sendMessage(remoteJid, { text: "Bitte antworte mit *!upload* auf ein Bild oder Album oder sende ein Bild direkt mit *!upload* in der Beschreibung." }, { quoted: msg });
           continue;
         }
 
@@ -204,10 +229,10 @@ async function startBot() {
         }
 
         let savedCount = 0;
-        for (const target of imageTargets) {
+        for (const targetMsg of imagesToDownload) {
           try {
             const buffer = await downloadMediaMessage(
-              target,
+              targetMsg,
               'buffer',
               {},
               { 
@@ -216,19 +241,20 @@ async function startBot() {
               }
             );
 
-            const fileName = `lostplace_${Date.now()}_${Math.floor(Math.random() * 1000)}.png`;
+            const fileName = `lostplace_${Date.now()}_${Math.floor(Math.random() * 10000)}.png`;
             const savePath = path.join(imagesDir, fileName);
             fs.writeFileSync(savePath, buffer);
             savedCount++;
-          } catch (err) {
-            console.error('Fehler beim Download eines Bildes:', err);
+          } catch (error) {
+            console.error('Fehler beim Herunterladen eines Bildes:', error);
           }
         }
 
         if (savedCount > 0) {
-          await sock.sendMessage(remoteJid, { text: `*Erfolg!* Es wurden *${savedCount}* Bild(er) in _assets/images/_ gespeichert.` }, { quoted: msg });
+          console.log(`[UPLOAD ERFOLGREICH] ${savedCount} Bilder gespeichert.`);
+          await sock.sendMessage(remoteJid, { text: `*Upload erfolgreich!* Es wurden *${savedCount}* Bild(er) in _assets/images/_ gespeichert.` }, { quoted: msg });
         } else {
-          await sock.sendMessage(remoteJid, { text: "Fehler beim Herunterladen der Bilder. Bitte versuche es erneut." }, { quoted: msg });
+          await sock.sendMessage(remoteJid, { text: "Fehler beim Herunterladen und Speichern der Bilder." }, { quoted: msg });
         }
       }
       else if (command === 'codex') {
@@ -242,7 +268,7 @@ async function startBot() {
             await sock.sendMessage(remoteJid, { text: "Du hast die richtige Antwort gewählt! Mach weiter so." }, { quoted: msg });
             codexSessions.delete(remoteJid);
           } else if (userAnswer === 'true' || userAnswer === 'false') {
-            await sock.sendMessage(remoteJid, { text: "FALSCH! Bitte lies dir nochmal den Urbex Codex mit *!rules* durch!" }, { quoted: msg });
+            await sock.sendMessage(remoteJid, { text:"FALSCH! Bitte lies dir nochmal den Urbex Codex mit *!rules* durch!" }, { quoted: msg });
             codexSessions.delete(remoteJid);
           } else {
             await sock.sendMessage(remoteJid, { text: `Bitte antworte exakt mit *${PREFIX}codex answer true* oder *${PREFIX}codex answer false*.` }, { quoted: msg });
