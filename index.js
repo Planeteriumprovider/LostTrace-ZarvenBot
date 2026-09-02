@@ -157,7 +157,7 @@ async function startBot() {
           `*${PREFIX}menu* - Zeigt dieses Menü an\n` +
           `*${PREFIX}codex* - Startet die Kodex Prüfung\n` +
           `*${PREFIX}lostplace* - Sendet ein zufälliges Bild\n` +
-          `*${PREFIX}upload* - Bilder für !lostplace hochladen.\n` +
+          `*${PREFIX}upload* - Bilder für !lostplace hochladen\n` +
           `*${PREFIX}map* - Sendet die KML Karte\n` +
           `*${PREFIX}jid* - Zeigt deine JID an\n` +
           `*${PREFIX}lid* - Zeigt deine LID an\n` +
@@ -171,43 +171,64 @@ async function startBot() {
         await sock.sendMessage(remoteJid, { text: `*Deine LID lautet:* ${sender}` }, { quoted: msg });
       }
       else if (command === 'upload') {
-        const quotedMsg = m.extendedTextMessage?.contextInfo?.quotedMessage;
-        const targetImageMessage = m.imageMessage || quotedMsg?.imageMessage;
+        const contextInfo = m.extendedTextMessage?.contextInfo || 
+                            m.ephemeralMessage?.message?.extendedTextMessage?.contextInfo;
+        const quoted = contextInfo?.quotedMessage;
 
-        if (!targetImageMessage) {
-          await sock.sendMessage(remoteJid, { text: "Bitte antworte mit *!upload* auf ein Bild / mehrere Bilder oder sende es direkt mit der Bildunterschrift *!upload*." }, { quoted: msg });
+        let imageTargets = [];
+
+        if (m.imageMessage) {
+          imageTargets.push({ message: m });
+        } else if (quoted) {
+          const unwrappedQuoted = quoted.ephemeralMessage?.message || quoted;
+          if (unwrappedQuoted.imageMessage) {
+            imageTargets.push({ message: unwrappedQuoted });
+          } else if (unwrappedQuoted.albumMessage) {
+            const albumCollection = unwrappedQuoted.albumMessage.expectedImageCount ? unwrappedQuoted.albumMessage : unwrappedQuoted;
+            for (const key in albumCollection) {
+              if (albumCollection[key]?.imageMessage) {
+                imageTargets.push({ message: { imageMessage: albumCollection[key].imageMessage } });
+              }
+            }
+          }
+        }
+
+        if (imageTargets.length === 0) {
+          await sock.sendMessage(remoteJid, { text: "Bitte antworte mit *!upload* auf ein Bild oder Album oder sende ein Bild direkt mit der Bildunterschrift *!upload*." }, { quoted: msg });
           continue;
         }
 
-        try {
-          const fakeMsg = {
-            message: targetImageMessage === m.imageMessage ? m : quotedMsg
-          };
-          
-          const buffer = await downloadMediaMessage(
-            fakeMsg,
-            'buffer',
-            {},
-            { 
-              logger: pino({ level: 'silent' }),
-              reuploadRequest: sock.updateMediaMessage 
-            }
-          );
+        const imagesDir = path.join(__dirname, 'assets', 'images');
+        if (!fs.existsSync(imagesDir)) {
+          fs.mkdirSync(imagesDir, { recursive: true });
+        }
 
-          const imagesDir = path.join(__dirname, 'assets', 'images');
-          if (!fs.existsSync(imagesDir)) {
-            fs.mkdirSync(imagesDir, { recursive: true });
+        let savedCount = 0;
+        for (const target of imageTargets) {
+          try {
+            const buffer = await downloadMediaMessage(
+              target,
+              'buffer',
+              {},
+              { 
+                logger: pino({ level: 'silent' }),
+                reuploadRequest: sock.updateMediaMessage 
+              }
+            );
+
+            const fileName = `lostplace_${Date.now()}_${Math.floor(Math.random() * 1000)}.png`;
+            const savePath = path.join(imagesDir, fileName);
+            fs.writeFileSync(savePath, buffer);
+            savedCount++;
+          } catch (err) {
+            console.error('Fehler beim Download eines Bildes:', err);
           }
+        }
 
-          const fileName = `lostplace_${Date.now()}.png`;
-          const savePath = path.join(imagesDir, fileName);
-          fs.writeFileSync(savePath, buffer);
-
-          console.log(`[UPLOAD ERFOLGREICH] Bild gespeichert unter: ${savePath}`);
-          await sock.sendMessage(remoteJid, { text: `*Bild erfolgreich in assets/images/ gespeichert!*\nDateiname: _${fileName}_` }, { quoted: msg });
-        } catch (error) {
-          console.error('Fehler beim Herunterladen des Bildes:', error);
-          await sock.sendMessage(remoteJid, { text: "Fehler beim Herunterladen und Speichern des Bildes." }, { quoted: msg });
+        if (savedCount > 0) {
+          await sock.sendMessage(remoteJid, { text: `*Erfolg!* Es wurden *${savedCount}* Bild(er) in _assets/images/_ gespeichert.` }, { quoted: msg });
+        } else {
+          await sock.sendMessage(remoteJid, { text: "Fehler beim Herunterladen der Bilder. Bitte versuche es erneut." }, { quoted: msg });
         }
       }
       else if (command === 'codex') {
@@ -221,7 +242,7 @@ async function startBot() {
             await sock.sendMessage(remoteJid, { text: "Du hast die richtige Antwort gewählt! Mach weiter so." }, { quoted: msg });
             codexSessions.delete(remoteJid);
           } else if (userAnswer === 'true' || userAnswer === 'false') {
-            await sock.sendMessage(remoteJid, { text:"FALSCH! Bitte lies dir nochmal den Urbex Codex mit *!rules* durch!" }, { quoted: msg });
+            await sock.sendMessage(remoteJid, { text: "FALSCH! Bitte lies dir nochmal den Urbex Codex mit *!rules* durch!" }, { quoted: msg });
             codexSessions.delete(remoteJid);
           } else {
             await sock.sendMessage(remoteJid, { text: `Bitte antworte exakt mit *${PREFIX}codex answer true* oder *${PREFIX}codex answer false*.` }, { quoted: msg });
