@@ -26,6 +26,8 @@ const askQuestion = (text) => new Promise((resolve) => rl.question(text, resolve
 const PREFIX = '!';
 const BOT_OWNERS = ['491703630216', '61890562674824@lid', '491703630216@s.whatsapp.net'];
 
+const coordRegex = /^[-+]?([1-9]?\d(\.\d+)?|90(\.0+)?),\s*[-+]?(180(\.0+)?|((1[0-7]\d)|([1-9]?\d))(\.\d+)?)$/;
+
 const codexQuestions = [
   { q: "Selbst wenn ein Gebäude seit über 30 Jahren völlig verfallen ist, erlischt das Hausrecht des Eigentümers juristisch in Deutschland niemals automatisch.", a: "true" },
   { q: "Das Wegdrücken oder Abschneiden von wuchernden Ästen und Dornenhecken, um an ein Fenster zu gelangen, verstößt bereits gegen den strikten Urbex-Kodex.", a: "true" },
@@ -53,6 +55,72 @@ const codexQuestions = [
 const codexSessions = new Map();
 const recentImageMessages = [];
 const uploadSessions = new Map();
+
+function latLngToTile(lat, lng, zoom) {
+  const x = Math.floor(((lng + 180) / 360) * Math.pow(2, zoom));
+  const latRad = (lat * Math.PI) / 180;
+  const y = Math.floor(
+    ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * Math.pow(2, zoom)
+  );
+  return { x, y };
+}
+
+async function handleSatelliteCommand(sock, remoteJid, msg, userInput) {
+  let lat, lng;
+  let locationDescription = "";
+
+  if (coordRegex.test(userInput.trim())) {
+    const parts = userInput.split(',');
+    lat = parseFloat(parts[0].trim());
+    lng = parseFloat(parts[1].trim());
+    locationDescription = "Exakte GPS-Koordinaten";
+  } else {
+    try {
+      const geoRes = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(userInput)}`, {
+        headers: { 'User-Agent': 'LostTrace-ZarvenBot' }
+      });
+      const geoData = await geoRes.json();
+
+      if (!geoData || geoData.length === 0) {
+        await sock.sendMessage(remoteJid, { text: "Dieser Lost Place oder Ort wurde nicht gefunden." }, { quoted: msg });
+        return;
+      }
+
+      lat = parseFloat(geoData[0].lat);
+      lng = parseFloat(geoData[0].lon);
+      locationDescription = geoData[0].display_name;
+    } catch (error) {
+      console.error(error);
+      await sock.sendMessage(remoteJid, { text: "Fehler bei der Ortssuche." }, { quoted: msg });
+      return;
+    }
+  }
+
+  const zoom = 18;
+  const { x, y } = latLngToTile(lat, lng, zoom);
+  const tileUrl = `https://mt1.google.com/vt/lyrs=s&x=${x}&y=${y}&z=${zoom}`;
+
+  try {
+    const mapRes = await fetch(tileUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+      }
+    });
+    const arrayBuffer = await mapRes.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
+    const captionText = `🏚️ *Lost Place Satelliten-Check (Google)*\n\n` +
+                        `📍 *Eingabe:* ${userInput}\n` +
+                        `🗺️ *Gefundener Ort:* ${locationDescription}\n\n` +
+                        `🌐 *Koordinaten:*\n\`${lat}, ${lng}\`\n\n` +
+                        `🚗 *Navigation:*\nhttps://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
+
+    await sock.sendMessage(remoteJid, { image: buffer, caption: captionText }, { quoted: msg });
+  } catch (error) {
+    console.error(error);
+    await sock.sendMessage(remoteJid, { text: "Fehler beim Laden des Google Satellitenbildes." }, { quoted: msg });
+  }
+}
 
 function parseKmlSpots(kmlText) {
   const spots = [];
@@ -289,6 +357,7 @@ async function startBot() {
           `*${PREFIX}codex* - Startet die Kodex Prüfung\n` +
           `*${PREFIX}lostplace* - Sendet ein zufälliges Bild\n` +
           `*${PREFIX}location* - Zieht einen zufälligen Spot aus der KML Karte\n` +
+          `*${PREFIX}sat [Ort/GPS]* - Ruft Google-Satellitenbilder ab\n` +
           `*${PREFIX}upload* - Bilder für !lostplace hochladen\n` +
           `*${PREFIX}map* - Sendet die KML Karte\n` +
           `*${PREFIX}jid* - Zeigt deine JID an\n` +
@@ -301,6 +370,14 @@ async function startBot() {
       }
       else if (command === 'lid') {
         await sock.sendMessage(remoteJid, { text: `*Deine LID lautet:* ${sender}` }, { quoted: msg });
+      }
+      else if (command === 'sat' || command === 'satellite') {
+        const query = args.slice(1).join(' ');
+        if (!query) {
+          await sock.sendMessage(remoteJid, { text: `Bitte gib einen Ort oder Koordinaten ein, z. B. *${PREFIX}sat 52.5162, 13.3777* oder *${PREFIX}sat Heilstätten Beelitz*` }, { quoted: msg });
+        } else {
+          await handleSatelliteCommand(sock, remoteJid, msg, query);
+        }
       }
       else if (command === 'location') {
         const mapPath = path.join(__dirname, 'assets', 'maps', 'LostTraceMap.kml');
